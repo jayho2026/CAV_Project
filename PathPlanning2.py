@@ -44,7 +44,7 @@ def main():
             direction = goal_position - current_position
             distance = np.linalg.norm(direction)
             
-            if distance < 0.5:  # Close enough to the goal
+            if distance < 0.3:  # 0.3m from the goal
                 break
 
             goal_angle = np.arctan2(direction[1], direction[0])

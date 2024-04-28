@@ -30,7 +30,7 @@ def main():
         direction = goal_position - robot_position
         distance = np.linalg.norm(direction)
 
-        if distance < 0.1:  # 0.1m from the goal
+        if distance < 0.3:  # 0.3m from the goal
             break
 
         goal_angle = np.arctan2(direction[1], direction[0])
@@ -39,7 +39,7 @@ def main():
         # Normalize the angle difference within the range -pi to pi
         angle_diff = (angle_diff + np.pi) % (2 * np.pi) - np.pi
 
-        base_speed = 2.0
+        base_speed = 3.0
         turn_speed = 0.5 * angle_diff  # Control how fast the robot turns based on the angle difference
 
         left_speed = base_speed - turn_speed
