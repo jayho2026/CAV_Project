@@ -14,8 +14,8 @@ def main():
     motorRight = sim.getObject('/PioneerP3DX/rightMotor')
 
     # Assuming sensors are labeled from 1 to 16, and sensors 4 to 6 cover the front
-    #front_sensors = [sim.getObject(f'/PioneerP3DX/ultrasonicSensor{i}') for i in range(2, 5)]
-    front_sensors = sim.getObject('/PioneerP3DX/ultrasonicSensor[2]')
+    front_sensors = [sim.getObject(f'/PioneerP3DX/ultrasonicSensor[{i}]') for i in range(2, 5)]
+    #front_sensors = sim.getObject('/PioneerP3DX/ultrasonicSensor[2]')
     
     noDetectionDist = 0.6  # Set the detection threshold distance
 
@@ -26,9 +26,12 @@ def main():
         while True:
             obstacle_detected = False
             
-            res, dist, _, _, _ = sim.readProximitySensor(front_sensors)
-            if res == 1 and dist < noDetectionDist:
-                obstacle_detected = True
+            # Check each sensor in front_sensors
+            for sensor in front_sensors:
+                res, dist, _, _, _ = sim.readProximitySensor(sensor)
+                if res == 1 and dist < noDetectionDist:
+                    obstacle_detected = True
+                    break
                 
 
             if obstacle_detected:
