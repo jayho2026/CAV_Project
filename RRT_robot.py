@@ -1,13 +1,24 @@
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
-def detect_obstacles(sim, sensors, noDetectionDist):
+def detect_obstacles(sim, robot, sensors, noDetectionDist):
     obstacles = []
+    robot_position = sim.getObjectPosition(robot, -1)[:2]
+    robot_orientation = sim.getObjectOrientation(robot, -1)[2]  # Get yaw (z-axis rotation)
+    
     for sensor in sensors:
         res, dist, detectedPoint, _, _ = sim.readProximitySensor(sensor)
         if res == 1 and dist < noDetectionDist:
-            obstacles.append(detectedPoint[:2])  # Store the x, y position of the detected obstacle
+            detectedPoint = np.array(detectedPoint[:2])
+            
+            # Transform detected point based on robot position and orientation
+            rotation_matrix = np.array([[np.cos(robot_orientation), -np.sin(robot_orientation)],
+                                        [np.sin(robot_orientation), np.cos(robot_orientation)]])
+            detected_point_transformed = rotation_matrix @ detectedPoint + robot_position
+            obstacles.append(detected_point_transformed)
+    
     return obstacles
 
 def main():
@@ -20,23 +31,37 @@ def main():
     goal = sim.getObject('/Goal')
     
     # Sensing
-    sensors = [sim.getObject(f'/PioneerP3DX/ultrasonicSensor[{i}]') for i in range(16)]  # All 8 sensors
+    sensors = [sim.getObject(f'/PioneerP3DX/ultrasonicSensor[{i}]') for i in range(16)]  # All 16 sensors
     
-    noDetectionDist = 0.8  # Set the detection distance
+    noDetectionDist = 2.5  # Set the detection distance
 
     # Start the simulation
     sim.startSimulation()
 
+    # Initialize a list to store accumulated obstacle points
+    accumulated_obstacles = []
+
     try:
+        plt.ion()
+        fig, ax = plt.subplots()
+        scatter = ax.scatter([], [])
+        plt.xlim(-5, 5)
+        plt.ylim(-5, 5)
+        
         while True:
             # Sample the environment
-            obstacles = detect_obstacles(sim, sensors, noDetectionDist)
+            obstacles = detect_obstacles(sim, robot, sensors, noDetectionDist)
+            accumulated_obstacles.extend(obstacles)
             
             # Print obstacles for debugging
             print("Obstacles detected: ", obstacles)
 
+            # Update the scatter plot
+            scatter.set_offsets(accumulated_obstacles)
+            plt.draw()
+            plt.pause(0.1)
+
             # Simulate robot behavior (placeholder for now)
-            # e.g., move randomly or follow a simple pattern
             #sim.setJointTargetVelocity(motorLeft, 1.0)
             #sim.setJointTargetVelocity(motorRight, 1.0)
             
