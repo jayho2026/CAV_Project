@@ -17,7 +17,7 @@ def main():
     front_sensors = [sim.getObject(f'/PioneerP3DX/ultrasonicSensor[{i}]') for i in range(2, 5)]
     #front_sensors = sim.getObject('/PioneerP3DX/ultrasonicSensor[2]')
     
-    noDetectionDist = 0.6  # Set the detection threshold distance
+    noDetectionDist = 0.6  # Set the detection distance
 
     # Start the simulation
     sim.startSimulation()
