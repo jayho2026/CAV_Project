@@ -33,7 +33,7 @@ def main():
     # Sensing
     sensors = [sim.getObject(f'/PioneerP3DX/ultrasonicSensor[{i}]') for i in range(16)]  # All 16 sensors
     
-    noDetectionDist = 2.5  # Set the detection distance
+    noDetectionDist = 2  # Set the detection distance
 
     # Start the simulation
     sim.startSimulation()
