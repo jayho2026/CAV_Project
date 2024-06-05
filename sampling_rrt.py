@@ -63,7 +63,7 @@ class RRT:
 
     def planning(self):
         for i in range(self.max_iter):
-            if len(self.nodes) >= 20:  # Limit the number of nodes to 20
+            if len(self.nodes) >= 50:  # Limit the number of nodes to 20
                 break
             node_rand = self.generate_random_node()
             node_near = self.nearest_node(node_rand)
@@ -84,7 +84,7 @@ class RRT:
                         self.dummy_handles.append(dummy_handle)
                         return self.extract_path(final_node)
                     
-            time.sleep(1)
+            time.sleep(0.2)
 
         return None
 
@@ -157,7 +157,7 @@ def main():
                     angle_diff = (angle_diff + np.pi) % (2 * np.pi) - np.pi
                     
                     base_speed = 2.0
-                    turn_speed = 1.0 * angle_diff
+                    turn_speed = 2.5 * angle_diff
                     
                     left_speed = base_speed - turn_speed
                     right_speed = base_speed + turn_speed
