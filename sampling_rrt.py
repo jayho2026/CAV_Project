@@ -2,6 +2,9 @@ import numpy as np
 import time
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
+import json
+
+
 class Node:
     def __init__(self, n):
         self.x = n[0]
@@ -44,10 +47,59 @@ class RRT:
         return self.nodes[int(np.argmin([np.hypot(nd.x - node.x, nd.y - node.y) for nd in self.nodes]))]
 
     def is_collision(self, node):
-        for ox, oy, w, h in self.obstacles:
-            if ox <= node.x <= ox + w and oy <= node.y <= oy + h:
+        for ox, oy, radius in self.obstacles:
+            if np.hypot(node.x - ox, node.y - oy) <= radius:
                 return True
         return False
+
+    def is_collision_on_path(self, from_node, to_node):
+        def point_to_line_distance(px, py, x1, y1, x2, y2):
+            norm = np.hypot(x2 - x1, y2 - y1)
+            if norm == 0:
+                return np.hypot(px - x1, py - y1)
+            u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (norm * norm)
+            u = max(0, min(1, u))
+            nearest_x = x1 + u * (x2 - x1)
+            nearest_y = y1 + u * (y2 - y1)
+            return np.hypot(px - nearest_x, py - nearest_y)
+
+        for ox, oy, radius in self.obstacles:
+            if point_to_line_distance(ox, oy, from_node.x, from_node.y, to_node.x, to_node.y) <= radius:
+                return True
+        return False
+
+    def line_intersects_rect(self, x1, y1, x2, y2, rx, ry, rw, rh):
+        # Check line intersection with rectangle
+        # Calculate all four sides of the rectangle
+        left = rx
+        right = rx + rw
+        top = ry
+        bottom = ry + rh
+
+        # Use the Cohen-Sutherland algorithm or Liang-Barsky algorithm for line clipping
+        # For simplicity, here is a basic approach using separation axis theorem
+        if (min(x1, x2) > right or max(x1, x2) < left or
+            min(y1, y2) > bottom or max(y1, y2) < top):
+            return False
+
+        # Check line intersection with each side of the rectangle
+        if self.segment_intersects(x1, y1, x2, y2, left, top, right, top) or \
+        self.segment_intersects(x1, y1, x2, y2, left, bottom, right, bottom) or \
+        self.segment_intersects(x1, y1, x2, y2, left, top, left, bottom) or \
+        self.segment_intersects(x1, y1, x2, y2, right, top, right, bottom):
+            return True
+
+        return False
+
+    def segment_intersects(self, Ax, Ay, Bx, By, Cx, Cy, Dx, Dy):
+        # Determine if two line segments intersect using vector cross products
+        def ccw(Ax, Ay, Bx, By, Cx, Cy):
+            return (Cy - Ay) * (Bx - Ax) > (By - Ay) * (Cx - Ax)
+
+        return (ccw(Ax, Ay, Cx, Cy, Dx, Dy) != ccw(Bx, By, Cx, Cy, Dx, Dy) and
+                ccw(Ax, Ay, Bx, By, Cx, Cy) != ccw(Ax, Ay, Bx, By, Dx, Dy))
+
+
 
     def new_state(self, from_node, to_node):
         dist, theta = self.get_distance_and_angle(from_node, to_node)
@@ -84,6 +136,8 @@ class RRT:
                         self.dummy_handles.append(dummy_handle)
                         return self.extract_path(final_node)
                     
+            else: continue
+                    
             time.sleep(0.2)
 
         return None
@@ -96,14 +150,18 @@ class RRT:
         path.append((self.start.x, self.start.y))
         return path[::-1]
 
-def get_obstacles_positions(sim):
+
+
+def load_obstacles_from_json(file_path):
+    with open(file_path, 'r') as f:
+        data = json.load(f)
     obstacles = []
-    for i in range(2):  # Assuming there are 2 obstacle objects
-        obstacle_handle = sim.getObject('/Cuboid[0]')
-        obstacle_position = sim.getObjectPosition(obstacle_handle, sim.handle_world)[:2]
-        obstacle_size = [1, 1]  # Assuming each obstacle occupies a 1x1 area
-        obstacles.append((*obstacle_position, *obstacle_size))
+    for item in data:
+        x, y, diameter = item['x'], item['y'], item['size']
+        radius = diameter / 2
+        obstacles.append((x, y, radius))  # Store center and radius
     return obstacles
+
 
 def main():
     client = RemoteAPIClient()
@@ -116,7 +174,12 @@ def main():
     start_position = sim.getObjectPosition(robot_handle, sim.handle_world)[:2]
     goal_position = sim.getObjectPosition(goal_handle, sim.handle_world)[:2]
     
-    obstacles = get_obstacles_positions(sim)
+        
+    # Load obstacles from the JSON file
+    obstacles = load_obstacles_from_json('grid.json')
+   
+    
+    
     
     x_range = (0, 10)
     y_range = (0, 10)
@@ -177,6 +240,7 @@ def main():
             print("Simulation stopped and cleaned up.")
     else:
         print("No valid path found. Adjust the environment or parameters and try again.")
+        cv2.destroyAllWindows()
         sim.stopSimulation()
 
 if __name__ == '__main__':

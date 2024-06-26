@@ -4,6 +4,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 import cv2
+import json
 
 def fetch_image_from_sensor(sim, vision_sensor_handle):
     # Ensure the vision sensor is handled if needed
@@ -23,6 +24,8 @@ def fetch_image_from_sensor(sim, vision_sensor_handle):
 
         # Display the image using Matplotlib
         plt.imshow(image_array)
+        plt.show()
+
         
         return cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV compatibility
     
@@ -76,7 +79,53 @@ def image_to_grid(binary_image, grid_size):
     print(grid)
     return grid
 
+def save_to_json(obstacles, filename='grid.json'):
+    # Open a file and use json.dump to write the list of dictionaries to the file
+    with open(filename, 'w') as f:
+        json.dump(obstacles, f, indent=4)  # Pretty print the data for readability
 
+def convert_to_simulation_coordinates(grid):
+    scale_factor = 0.0254 #0.127  # meters per cell
+    origin_shift = grid.shape[0] // 2  # Assuming grid is square
+    obstacles = []
+
+    for i in range(grid.shape[0]):
+        for j in range(grid.shape[1]):
+            if grid[i, j] == 0:  # Assuming '0' represents an obstacle
+                x = ((j - origin_shift) * scale_factor) - 0.04
+                y = ((i - origin_shift) * scale_factor) - 0.04
+                obstacles.append({"x": x, "y": y, "size": scale_factor})
+    
+    save_to_json(obstacles)            
+                
+    print(obstacles)
+                
+    return obstacles
+
+def visualize_obstacles(grid):
+    obstacles = convert_to_simulation_coordinates(grid)
+    # Prepare to plot
+    fig, ax = plt.subplots()
+    ax.set_xlim(-3, 3)
+    ax.set_ylim(-3, 3)
+    ax.set_title('Simulation Grid Visualization')
+    ax.set_xlabel('Meters (X)')
+    ax.set_ylabel('Meters (Y)')
+    
+    ax.scatter([-2.5], [-2.5], color='blue', s=100, marker='o', label='Marked Point')
+
+
+    # Plot each obstacle
+    for obstacle in obstacles:
+        rect = plt.Rectangle((obstacle['x'], obstacle['y']), obstacle['size'], obstacle['size'], color='red')
+        ax.add_patch(rect)
+
+    # Adding grid lines for reference
+    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    ax.axhline(y=0, color='k')
+    ax.axvline(x=0, color='k')
+
+    plt.show()
 
 def main():
     client = RemoteAPIClient()
@@ -106,13 +155,15 @@ def main():
         
         
         # Convert to grid
-        grid_size = 50  # Define your grid size
+        grid_size = 250  # Define your grid size
         
         grid = image_to_grid(processed_image, grid_size)
         
+        visualize_obstacles(grid)
+                
         # Plot the grid
-        plt.imshow(grid, cmap='gray', interpolation='nearest')
-        plt.show()
+        #plt.imshow(grid, cmap='gray', interpolation='nearest')
+        #plt.show()
 
 
         
