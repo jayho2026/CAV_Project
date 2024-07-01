@@ -94,7 +94,7 @@ def convert_to_simulation_coordinates(grid):
             if grid[i, j] == 0:  # Assuming '0' represents an obstacle
                 x = ((j - origin_shift) * scale_factor) - 0.04
                 y = ((i - origin_shift) * scale_factor) - 0.04
-                obstacles.append({"x": x, "y": y, "size": scale_factor + 0.3})
+                obstacles.append({"x": x, "y": y, "size": scale_factor + 0.7})
     
     save_to_json(obstacles)            
                 
@@ -159,7 +159,7 @@ def main():
         
         grid = image_to_grid(processed_image, grid_size)
         
-        #visualize_obstacles(grid)
+        visualize_obstacles(grid)
                 
         # Plot the grid
         #plt.imshow(grid, cmap='gray', interpolation='nearest')
