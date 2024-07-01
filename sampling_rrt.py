@@ -24,6 +24,7 @@ class RRT:
         self.nodes = [self.start]
         self.sim = sim
         self.dummy_handles = []
+        self.line_handle = self.create_line_drawing_handle()
 
         # Create a dummy object for the start and goal nodes
         self.start_handle = self.create_dummy(self.start.x, self.start.y)
@@ -37,14 +38,23 @@ class RRT:
     def set_dummy_position(self, dummy_handle, x, y):
         self.sim.setObjectPosition(dummy_handle, -1, [x, y, 0])
 
+    # Goal biasness
+    # probability of sampling either a random space near the latest node or just follow the goal
     def generate_random_node(self):
-        if np.random.random() > self.goal_sample_rate:
+        if np.random.random() > self.goal_sample_rate:      
             return Node((np.random.uniform(self.x_range[0], self.x_range[1]),
                          np.random.uniform(self.y_range[0], self.y_range[1])))
         return self.goal
 
     def nearest_node(self, node):
         return self.nodes[int(np.argmin([np.hypot(nd.x - node.x, nd.y - node.y) for nd in self.nodes]))]
+    
+    def new_state(self, from_node, to_node):
+        dist, theta = self.get_distance_and_angle(from_node, to_node)
+        dist = min(self.step_len, dist)
+        new_node = Node((from_node.x + dist * np.cos(theta), from_node.y + dist * np.sin(theta)))
+        new_node.parent = from_node
+        return new_node
 
     def is_collision(self, node):
         for ox, oy, radius in self.obstacles:
@@ -101,13 +111,7 @@ class RRT:
 
 
 
-    def new_state(self, from_node, to_node):
-        dist, theta = self.get_distance_and_angle(from_node, to_node)
-        dist = min(self.step_len, dist)
-        new_node = Node((from_node.x + dist * np.cos(theta), from_node.y + dist * np.sin(theta)))
-        new_node.parent = from_node
-        return new_node
-
+    
     def get_distance_and_angle(self, from_node, to_node):
         dx = to_node.x - from_node.x
         dy = to_node.y - from_node.y
@@ -115,7 +119,7 @@ class RRT:
 
     def planning(self):
         for i in range(self.max_iter):
-            if len(self.nodes) >= 50:  # Limit the number of nodes to 20
+            if len(self.nodes) >= 1500:  # Limit the number of nodes to 20
                 break
             node_rand = self.generate_random_node()
             node_near = self.nearest_node(node_rand)
@@ -126,6 +130,8 @@ class RRT:
                 dummy_handle = self.create_dummy(node_new.x, node_new.y)
                 self.set_dummy_position(dummy_handle, node_new.x, node_new.y)
                 self.dummy_handles.append(dummy_handle)
+                self.add_line(node_near, node_new)  # Draw line from nearest node to new node
+
 
                 if self.get_distance_and_angle(node_new, self.goal)[0] <= self.step_len:
                     final_node = self.new_state(node_new, self.goal)
@@ -149,7 +155,22 @@ class RRT:
             path.append((node.x, node.y))
         path.append((self.start.x, self.start.y))
         return path[::-1]
+    
+    
+    def create_line_drawing_handle(self):
+        # Create a line drawing handle with red color and a thickness of 2 pixels
+        return self.sim.addDrawingObject(self.sim.drawing_lines, 2, 0, -1, 9999, [1, 0, 0], [0, 0, 0], [0, 0, 0], [1, 0, 0])
+    
+    def clear_lines(self):
+        # Clear all lines
+        self.sim.addDrawingObjectItem(self.line_handle, None)
+        
+    
 
+    def add_line(self, node1, node2):
+        # Add a line segment between node1 and node2
+        line_data = [node1.x, node1.y, 0, node2.x, node2.y, 0]
+        self.sim.addDrawingObjectItem(self.line_handle, line_data)
 
 
 def load_obstacles_from_json(file_path):
@@ -181,9 +202,9 @@ def main():
     
     
     
-    x_range = (0, 10)
-    y_range = (0, 10)
-    step_len = 0.5
+    x_range = (0, 100)
+    y_range = (0, 100)
+    step_len = 0.25
     goal_sample_rate = 0.1
     max_iter = 500
     
@@ -237,10 +258,11 @@ def main():
             sim.setJointTargetVelocity(motorLeft, 0)
             sim.setJointTargetVelocity(motorRight, 0)
             sim.stopSimulation()
+            rrt.clear_lines()
             print("Simulation stopped and cleaned up.")
     else:
         print("No valid path found. Adjust the environment or parameters and try again.")
-        cv2.destroyAllWindows()
+        rrt.clear_lines()
         sim.stopSimulation()
 
 if __name__ == '__main__':

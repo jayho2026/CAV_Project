@@ -48,15 +48,15 @@ def preprocess_image(image):
     # Threshold the image
     _, binary = cv2.threshold(blurred, 120, 255, cv2.THRESH_BINARY)
     
-    plt.imshow(gray, cmap='gray')
-    plt.show()
+    
     
     # Apply morphological operations
     kernel = np.ones((5, 5), np.uint8)
     cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
     cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel)
     
-    
+    plt.imshow(cleaned, cmap='gray')
+    plt.show()
     
     return cleaned
 
@@ -94,7 +94,7 @@ def convert_to_simulation_coordinates(grid):
             if grid[i, j] == 0:  # Assuming '0' represents an obstacle
                 x = ((j - origin_shift) * scale_factor) - 0.04
                 y = ((i - origin_shift) * scale_factor) - 0.04
-                obstacles.append({"x": x, "y": y, "size": scale_factor})
+                obstacles.append({"x": x, "y": y, "size": scale_factor + 0.3})
     
     save_to_json(obstacles)            
                 
@@ -159,7 +159,7 @@ def main():
         
         grid = image_to_grid(processed_image, grid_size)
         
-        visualize_obstacles(grid)
+        #visualize_obstacles(grid)
                 
         # Plot the grid
         #plt.imshow(grid, cmap='gray', interpolation='nearest')
