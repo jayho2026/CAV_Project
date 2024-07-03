@@ -42,15 +42,9 @@ class RRT:
     # probability of sampling either a random space near the latest node or just follow the goal
     def generate_random_node(self):
         if np.random.random() > self.goal_sample_rate:
-            if np.random.random() < 0.5:  # 50% chance to generate a completely random node
-                return Node((np.random.uniform(self.x_range[0], self.x_range[1]),
+            return Node((np.random.uniform(self.x_range[0], self.x_range[1]),
                             np.random.uniform(self.y_range[0], self.y_range[1])))
-            else:  # 50% chance to expand from a random existing node
-                base_node = np.random.choice(self.nodes)
-                perturbation = np.random.normal(0, 1, 2)  # small Gaussian noise
-                new_x = max(self.x_range[0], min(self.x_range[1], base_node.x + perturbation[0]))
-                new_y = max(self.y_range[0], min(self.y_range[1], base_node.y + perturbation[1]))
-                return Node((new_x, new_y))
+            
         return self.goal
 
     def nearest_node(self, node):
@@ -151,7 +145,7 @@ class RRT:
                     
             else: continue
                     
-            time.sleep(0.2)
+            time.sleep(0.1)
 
         return None
 
@@ -209,11 +203,11 @@ def main():
     
     
     
-    x_range = (-10, 20)
-    y_range = (-10, 20)
-    step_len = 0.25
+    x_range = (-5, 5)
+    y_range = (-5, 5)
+    step_len = 0.3
     goal_sample_rate = 0.1
-    max_iter = 500
+    max_iter = 1500
     
     sim.startSimulation()
     
