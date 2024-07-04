@@ -4,6 +4,9 @@ from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
 import json
 
+from scipy.interpolate import CubicSpline
+
+
 
 class Node:
     def __init__(self, n):
@@ -50,6 +53,7 @@ class RRT:
     def nearest_node(self, node):
         return self.nodes[int(np.argmin([np.hypot(nd.x - node.x, nd.y - node.y) for nd in self.nodes]))]
     
+    # For placing the node onto the map
     def new_state(self, from_node, to_node):
         dist, theta = self.get_distance_and_angle(from_node, to_node)
         dist = min(self.step_len, dist)
@@ -68,8 +72,8 @@ class RRT:
             norm = np.hypot(x2 - x1, y2 - y1)
             if norm == 0:
                 return np.hypot(px - x1, py - y1)
-            u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (norm * norm)
-            u = max(0, min(1, u))
+            u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (norm * norm) # Closest point from the obstacle (scalar)
+            u = max(0, min(1, u))       # clamping make sure it remains within bounds
             nearest_x = x1 + u * (x2 - x1)
             nearest_y = y1 + u * (y2 - y1)
             return np.hypot(px - nearest_x, py - nearest_y)
@@ -157,6 +161,7 @@ class RRT:
         path.append((self.start.x, self.start.y))
         return path[::-1]
     
+        
     
     def create_line_drawing_handle(self):
         # Create a line drawing handle with red color and a thickness of 2 pixels
@@ -180,9 +185,29 @@ def load_obstacles_from_json(file_path):
     obstacles = []
     for item in data:
         x, y, diameter = item['x'], item['y'], item['size']
-        radius = diameter / 2
+        radius = diameter 
         obstacles.append((x, y, radius))  # Store center and radius
     return obstacles
+
+
+def smooth_path(path, resolution=100):
+        if len(path) < 3:  # Need at least three points to create a spline
+            return path  # No smoothing if not enough points
+
+        # Unpack the path into separate lists
+        x, y = zip(*path)
+        x = np.array(x)
+        y = np.array(y)
+
+        # Fit spline to path
+        cs_x = CubicSpline(np.arange(len(x)), x)
+        cs_y = CubicSpline(np.arange(len(y)), y)
+
+        # Generate smoothed path
+        x_smooth = cs_x(np.linspace(0, len(x) - 1, num=resolution))
+        y_smooth = cs_y(np.linspace(0, len(y) - 1, num=resolution))
+
+        return list(zip(x_smooth, y_smooth))
 
 
 def main():
@@ -205,7 +230,7 @@ def main():
     
     x_range = (-5, 5)
     y_range = (-5, 5)
-    step_len = 0.3
+    step_len = 0.6
     goal_sample_rate = 0.1
     max_iter = 1500
     
@@ -213,13 +238,18 @@ def main():
     
     rrt = RRT(start_position, goal_position, obstacles, x_range, y_range, step_len, goal_sample_rate, max_iter, sim)
     path = rrt.planning()
-
+    
+    
     if path:
         print("Path found!")
         for x, y in path:
             print(f"Path: x={x}, y={y}")
     else:
         print("Path not found.")
+        
+    if path:
+        smooth = smooth_path(path, 500)  # Increase resolution for finer path
+        print("Smooth Path generated")
     
     if path:
         # Move the robot along the path
@@ -228,10 +258,10 @@ def main():
         robot = sim.getObject('/PioneerP3DX')
 
         try:
-            for x, y in path:
+            for x, y in smooth:
                 current_position = np.array(sim.getObjectPosition(robot, -1)[:2])
                 target_position = np.array([x, y])
-                while np.linalg.norm(target_position - current_position) > 0.1:
+                while np.linalg.norm(target_position - current_position) > 0.5:
                     current_position = np.array(sim.getObjectPosition(robot, -1)[:2])
                     direction = target_position - current_position
                     distance = np.linalg.norm(direction)
@@ -260,10 +290,12 @@ def main():
             sim.setJointTargetVelocity(motorRight, 0)
             sim.stopSimulation()
             rrt.clear_lines()
+            
             print("Simulation stopped and cleaned up.")
     else:
         print("No valid path found. Adjust the environment or parameters and try again.")
         rrt.clear_lines()
+        
         sim.stopSimulation()
 
 if __name__ == '__main__':
