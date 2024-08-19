@@ -79,7 +79,7 @@ class RRT:
             return np.hypot(px - nearest_x, py - nearest_y)
 
         for ox, oy, radius in self.obstacles:
-            if point_to_line_distance(ox, oy, from_node.x, from_node.y, to_node.x, to_node.y) <= radius:
+            if point_to_line_distance(ox, oy, from_node.x, from_node.y, to_node.x, to_node.y) <= radius + 0.1:
                 return True
         return False
 
@@ -190,24 +190,6 @@ def load_obstacles_from_json(file_path):
     return obstacles
 
 
-def smooth_path(path, resolution=100):
-        if len(path) < 3:  # Need at least three points to create a spline
-            return path  # No smoothing if not enough points
-
-        # Unpack the path into separate lists
-        x, y = zip(*path)
-        x = np.array(x)
-        y = np.array(y)
-
-        # Fit spline to path
-        cs_x = CubicSpline(np.arange(len(x)), x)
-        cs_y = CubicSpline(np.arange(len(y)), y)
-
-        # Generate smoothed path
-        x_smooth = cs_x(np.linspace(0, len(x) - 1, num=resolution))
-        y_smooth = cs_y(np.linspace(0, len(y) - 1, num=resolution))
-
-        return list(zip(x_smooth, y_smooth))
 
 
 def main():
@@ -247,9 +229,7 @@ def main():
     else:
         print("Path not found.")
         
-    if path:
-        smooth = smooth_path(path, 500)  # Increase resolution for finer path
-        print("Smooth Path generated")
+    
     
     if path:
         # Move the robot along the path
@@ -258,7 +238,7 @@ def main():
         robot = sim.getObject('/PioneerP3DX')
 
         try:
-            for x, y in smooth:
+            for x, y in path:
                 current_position = np.array(sim.getObjectPosition(robot, -1)[:2])
                 target_position = np.array([x, y])
                 while np.linalg.norm(target_position - current_position) > 0.5:
@@ -272,7 +252,7 @@ def main():
                     angle_diff = (angle_diff + np.pi) % (2 * np.pi) - np.pi
                     
                     base_speed = 2.0
-                    turn_speed = 2.5 * angle_diff
+                    turn_speed = 1.5 * angle_diff
                     
                     left_speed = base_speed - turn_speed
                     right_speed = base_speed + turn_speed

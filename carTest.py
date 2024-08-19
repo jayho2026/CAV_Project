@@ -22,11 +22,11 @@ def main():
     sim.startSimulation()
 
     # Set the motor velocities
-    sim.setJointTargetVelocity(motorLeft, -10.5)
+    sim.setJointTargetVelocity(motorLeft, 10.5)
     sim.setJointTargetVelocity(motorRight, -10.5)
 
     # Let the robot move forward for 5 seconds
-    time.sleep(2.5)
+    time.sleep(1)
 
     # Stop the motors
     sim.setJointTargetVelocity(motorLeft, 0)
