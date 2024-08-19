@@ -4,10 +4,28 @@
 import threading
 import math
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
-
+import json
 
 global sims
 sims = {}
+
+def set_gripper(gripper_handle, open, velocity=0.11, force=20):
+    sim = sims['UR5']
+    if not open:
+        velocity = -velocity
+    
+    data = {
+        'velocity': velocity,
+        'force': force
+    }
+    
+    #packed_data = json.dumps(data)  # Serialize the dictionary into a JSON formatted string
+    return_code = sim.writeCustomTableData(gripper_handle, 'activity', data)
+    
+    if return_code == -1:
+        print("Failed to write data")
+    else:
+        print("Data written successfully")
 
 def blueRobot():
     robotColor = 'UR5'
@@ -15,6 +33,10 @@ def blueRobot():
     sim = client.require('sim')
     sims[robotColor] = sim 
     sim.setStepping(True)
+    
+    gripper_handle = sim.getObject('./RG2')
+    
+    set_gripper(gripper_handle, True)
 
     jointHandles = []
     for i in range(6):
@@ -32,8 +54,13 @@ def blueRobot():
         targetPos1 = [0, -90 * math.pi / 180, 0, 0, 0, 0, 0]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos1)
         print('Target 1 completed')
+        
         targetPos2 = [0, 90 * math.pi / 180, -10 * math.pi / 180, 0, 0, 0, 0]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos2)
+        
+        # Open the gripper
+        set_gripper(gripper_handle, False)
+
         print('Target 2 completed')
         targetPos3 = [0, 0, 0, 0, 0, 0, 0]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos3)
