@@ -5,8 +5,12 @@ import threading
 import math
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
+
+global sims
+sims = {}
+
 def blueRobot():
-    robotColor = 'blue'
+    robotColor = 'UR5'
     client = RemoteAPIClient()
     sim = client.require('sim')
     sims[robotColor] = sim 
@@ -14,7 +18,7 @@ def blueRobot():
 
     jointHandles = []
     for i in range(6):
-        jointHandles.append(sim.getObject('/' + robotColor + 'Robot/joint', {'index': i}))
+        jointHandles.append(sim.getObject('/' + robotColor + '/joint', {'index': i}))
 
     vel = 110 * math.pi / 180
     accel = 40 * math.pi / 180
@@ -25,14 +29,15 @@ def blueRobot():
     maxJerk = [jerk, jerk, jerk, jerk, jerk, jerk, jerk]
 
     for i in range(1):
-        targetPos1 = [90 * math.pi / 180, 90 * math.pi / 180, 170 * math.pi / 180, -90 * math.pi / 180, 90 * math.pi / 180, 90 * math.pi / 180, 0]
+        targetPos1 = [0, -90 * math.pi / 180, 0, 0, 0, 0, 0]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos1)
-
-        targetPos2 = [-90 * math.pi / 180, 90 * math.pi / 180, 180 * math.pi / 180, -90 * math.pi / 180, 90 * math.pi / 180, 90 * math.pi / 180, 0]
+        print('Target 1 completed')
+        targetPos2 = [0, 90 * math.pi / 180, -10 * math.pi / 180, 0, 0, 0, 0]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos2)
-
+        print('Target 2 completed')
         targetPos3 = [0, 0, 0, 0, 0, 0, 0]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos3)
+        print('Target 3 completed')
 
     sim.setStepping(False)
 
@@ -60,8 +65,6 @@ client = RemoteAPIClient()
 sim = client.require('sim')
 
 
-global sims
-sims = {}
 
 blueRobotThread = threading.Thread(target=blueRobot)
 
