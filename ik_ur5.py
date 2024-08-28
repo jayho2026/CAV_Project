@@ -19,16 +19,44 @@ def set_gripper_data(gripper_handle, open, velocity=0.11, force=20):
     sim.writeCustomTableData(gripper_handle, 'activity', data)
 
 def solve_ik(sim_tip, sim_target, ik_group, ik_env):
-    simIK.handleGroup(ik_env, ik_group, {'syncWorlds': True})
-    joints = simIK.getGroupJoints(ik_env, ik_group)
-    return joints
-
+    sim = sims['UR5']
+    # This line solves the ik problem, the syncWorlds synch the ik world with the simulation world
+    result = simIK.handleGroup(ik_env, ik_group, {'syncWorlds': True})
+    
+    if result:
+        # retrieves the handles of the joints involved in the IK calculation
+        joint_handles = simIK.getGroupJoints(ik_env, ik_group)
+        joint_positions = [simIK.getJointPosition(ik_env, handle) for handle in joint_handles]
+        return True, joint_positions
+    else:
+        return False, []
+    
+    
 def set_joint_positions(joint_handles, joint_positions):
     sim = sims['UR5']
     for handle, position in zip(joint_handles, joint_positions):
         sim.setJointPosition(handle, position)
+      
+def confCallback(config, vel, accel, data):
+    sim = sims[data['robotColor']]
+    handles = data['handles']
+    for i in range(len(handles)):
+        # Checks whether a scene object is dynamically enabled, i.e. is being handled and simulated by the physics engine.
+        if sim.isDynamicallyEnabled(handles[i]):
+            sim.setJointTargetPosition(handles[i], config[i])
+        else:
+            sim.setJointPosition(handles[i], config[i])
+
+def moveToConfig(robotColor, handles, maxVel, maxAccel, maxJerk, targetConf):
+    sim = sims[robotColor]
+    currentConf = []
+    for i in range(len(handles)):
+        currentConf.append(sim.getJointPosition(handles[i]))
+    sim.moveToConfig(-1, currentConf, None, None, maxVel, maxAccel, maxJerk, targetConf, None, confCallback, {'robotColor': robotColor, 'handles': handles}, None)
+
 
 def ur5_ik_control():
+    robotColor = 'UR5'
     client = RemoteAPIClient()
     sim = client.require('sim')
     global simIK
@@ -39,8 +67,8 @@ def ur5_ik_control():
     # Initialize handles and IK environment
     gripper_handle = sim.getObject('./RG2')
     sim_tip = sim.getObject('./ikTip')
-    sim_target = sim.getObject('./ikTarget')
-    model_base = sim.getObject('/PioneerP3DX/UR5')
+    sim_target = sim.getObject('/ikTarget')
+    model_base = sim.getObject('/UR5')
 
     jointHandles = []
     for i in range(6):
@@ -58,11 +86,13 @@ def ur5_ik_control():
     try:
         for x in range(3):
             # Solve IK
-            joint_positions = solve_ik(sim_tip, sim_target, ik_group, ik_env)
+            success, joint_positions = solve_ik(sim_tip, sim_target, ik_group, ik_env)
             
-            if joint_positions != 0:  # IK solved successfully
-                # Set joint positions
-                set_joint_positions(jointHandles, joint_positions)
+            if success:  # IK solved successfully
+                print(f"IK solved. Joint positions: {joint_positions}")
+                # Apply joint positions to the actual robot
+                for i, joint_handle in enumerate(jointHandles):
+                    sim.setJointTargetPosition(joint_handle, joint_positions[i])
             else:
                 print("Failed to solve IK")
 

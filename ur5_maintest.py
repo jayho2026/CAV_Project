@@ -27,6 +27,7 @@ def confCallback(config, vel, accel, data):
     sim = sims[data['robotColor']]
     handles = data['handles']
     for i in range(len(handles)):
+        # Checks whether a scene object is dynamically enabled, i.e. is being handled and simulated by the physics engine.
         if sim.isDynamicallyEnabled(handles[i]):
             sim.setJointTargetPosition(handles[i], config[i])
         else:
