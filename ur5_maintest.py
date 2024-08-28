@@ -48,6 +48,8 @@ def ur5_control():
     
     gripper_handle = sim.getObject('./RG2')
     
+    modelBase = sim.getObject('/PioneerP3DX/UR5')
+    
     # Open the gripper
     set_gripper(gripper_handle, True)
 

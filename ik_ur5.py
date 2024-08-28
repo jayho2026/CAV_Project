@@ -1,15 +1,12 @@
-# Make sure to have the add-on "ZMQ remote API" running in
-# CoppeliaSim. Do not launch simulation, but run this script
-
-import threading
 import math
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
-import json
+import threading
+import time
 
-global sims
+global sims, simIK
 sims = {}
 
-def set_gripper(gripper_handle, open, velocity=0.11, force=20):
+def set_gripper_data(gripper_handle, open, velocity=0.11, force=20):
     sim = sims['UR5']
     if not open:
         velocity = -velocity
@@ -19,103 +16,89 @@ def set_gripper(gripper_handle, open, velocity=0.11, force=20):
         'force': force
     }
     
-    #packed_data = json.dumps(data)  # Serialize the dictionary into a JSON formatted string
-    return_code = sim.writeCustomTableData(gripper_handle, 'activity', data)
-    
-    if return_code == -1:
-        print("Failed to write data")
-    else:
-        print("Data written successfully")
+    sim.writeCustomTableData(gripper_handle, 'activity', data)
 
-def blueRobot():
-    robotColor = 'UR5'
+def solve_ik(sim_tip, sim_target, ik_group, ik_env):
+    simIK.handleGroup(ik_env, ik_group, {'syncWorlds': True})
+    joints = simIK.getGroupJoints(ik_env, ik_group)
+    return joints
+
+def set_joint_positions(joint_handles, joint_positions):
+    sim = sims['UR5']
+    for handle, position in zip(joint_handles, joint_positions):
+        sim.setJointPosition(handle, position)
+
+def ur5_ik_control():
     client = RemoteAPIClient()
     sim = client.require('sim')
-    sims[robotColor] = sim 
-    sim.setStepping(True)
-    
+    global simIK
+    simIK = client.require('simIK')
+    sims['UR5'] = sim
+    sim.setStepping(False)
+
+    # Initialize handles and IK environment
     gripper_handle = sim.getObject('./RG2')
-    
-    set_gripper(gripper_handle, True)
+    sim_tip = sim.getObject('./ikTip')
+    sim_target = sim.getObject('./ikTarget')
+    model_base = sim.getObject('/PioneerP3DX/UR5')
 
     jointHandles = []
     for i in range(6):
-        jointHandles.append(sim.getObject('/' + robotColor + '/joint', {'index': i}))
-        
-    targetHandle = sim.getObject('./ikTarget')
+        jointHandles.append(sim.getObject('/' + 'UR5' + '/joint', {'index': i}))
 
-    vel = 0.5
-    accel = 0.1
-    jerk = 3
+    # Create IK environment and group
+    ik_env = simIK.createEnvironment()
+    ik_group = simIK.createGroup(ik_env)
+    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_pose)
 
-    maxVel = [vel, vel, vel, vel]
-    maxAccel = [accel, accel, accel, accel * 10]
-    maxJerk = [jerk, jerk, jerk, jerk]
-    
-    initTr = sim.getObjectPose(targetHandle)
+    # Open the gripper
+    set_gripper_data(gripper_handle, True)
 
-    for i in range(1):
-        goalTr = initTr.copy()
-        goalTr[2] = goalTr[2] + 0.2
-        sim.moveToPose(-1, initTr, maxVel, maxAccel, maxJerk, goalTr, poseCallback, {'robotColor': robotColor, 'handle': targetHandle})
-        print('Pose 1 completed')
-        
-        startTr = sim.getObjectPose(targetHandle)
-        goalTr[2] = goalTr[2] - 0.2
-        sim.moveToPose(-1, startTr, maxVel, maxAccel, maxJerk, goalTr, poseCallback, {'robotColor': robotColor, 'handle': targetHandle})
-        print('Pose 2 completed')
-        
-        startTr = sim.getObjectPose(targetHandle)
-        goalTr = sim.rotateAroundAxis(goalTr, [1, 0, 0], [startTr[0], startTr[1], startTr[2]], 90 * math.pi / 180)
-        sim.moveToPose(-1, startTr, maxVel, maxAccel, maxJerk, goalTr, poseCallback, {'robotColor': robotColor, 'handle': targetHandle})
-        print('Pose 3 completed')
-        
-        startTr = sim.getObjectPose(targetHandle)
-        sim.moveToPose(-1, startTr, maxVel, maxAccel, maxJerk, initTr, poseCallback, {'robotColor': robotColor, 'handle': targetHandle})
-    
+    # Main control loop
+    try:
+        for x in range(3):
+            # Solve IK
+            joint_positions = solve_ik(sim_tip, sim_target, ik_group, ik_env)
+            
+            if joint_positions != 0:  # IK solved successfully
+                # Set joint positions
+                set_joint_positions(jointHandles, joint_positions)
+            else:
+                print("Failed to solve IK")
+
+            # Example movement of the target dummy
+            current_pose = sim.getObjectPose(sim_target)
+            current_pose[1] = current_pose[1] + 0.1  # Move slightly in x direction
+            sim.setObjectPose(sim_target, current_pose)
+            
+            print("Update")
+
+            #sim.step()  # Step the simulation
+            time.sleep(1)  # Small delay to control the update rate
+
+    except KeyboardInterrupt:
+        print("Control loop interrupted")
+
     sim.setStepping(False)
+
+def main():
+    print('Program started')
+    client = RemoteAPIClient()
+    sim = client.require('sim')
+
+    ur5_thread = threading.Thread(target=ur5_ik_control)
+    ur5_thread.start()
+
+    sim.startSimulation()
     
-def poseCallback(tr, vel, accel, data):
-    sim = sims[data['robotColor']]
-    handle = data['handle']
-    sim.setObjectPose(handle, tr)
+    try:
+        ur5_thread.join()
+    except KeyboardInterrupt: 
+        print("Simulation interrupted by user.")
+    finally:
+        sim.stopSimulation()
 
+    print('Program ended')
 
-def confCallback(config, vel, accel, data):
-    sim = sims[data['robotColor']]
-    handles = data['handles']
-    for i in range(len(handles)):
-        if sim.isDynamicallyEnabled(handles[i]):
-            sim.setJointTargetPosition(handles[i], config[i])
-        else:
-            sim.setJointPosition(handles[i], config[i])
-
-def moveToConfig(robotColor, handles, maxVel, maxAccel, maxJerk, targetConf):
-    sim = sims[robotColor]
-    currentConf = []
-    for i in range(len(handles)):
-        currentConf.append(sim.getJointPosition(handles[i]))
-    sim.moveToConfig(-1, currentConf, None, None, maxVel, maxAccel, maxJerk, targetConf, None, confCallback, {'robotColor': robotColor, 'handles': handles}, None)
-
-print('Program started')
-client = RemoteAPIClient()
-sim = client.require('sim')
-
-
-
-blueRobotThread = threading.Thread(target=blueRobot) # Just to init the target?
-
-
-blueRobotThread.start() # initialise or start the thread?
-
-sim.startSimulation()
-
-
-blueRobotThread.join() # Officially starts the thread
-
-
-sim.stopSimulation()
-
-print('Program ended')
-
-
+if __name__ == '__main__':
+    main()
