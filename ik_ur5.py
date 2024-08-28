@@ -30,6 +30,18 @@ def solve_ik(sim_tip, sim_target, ik_group, ik_env):
         return True, joint_positions
     else:
         return False, []
+ 
+
+def moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, targetQ, auxData):
+    currentQ = sim.getObjectPose(auxData['tip'])
+    return sim.moveToPose(-1, currentQ, maxVelocity, maxAcceleration, maxJerk, targetQ, moveToPoseCallback, auxData, None)
+
+def moveToPoseCallback(q, velocity, accel, auxData):
+    sim = sims['UR5']
+    # Updating target pose during the movement
+    sim.setObjectPose(auxData['target'], q)
+    simIK.handleGroup(auxData['ikEnv'], auxData['ikGroup'], {'syncWorlds': True})
+
     
     
 def set_joint_positions(joint_handles, joint_positions):
@@ -62,12 +74,12 @@ def ur5_ik_control():
     global simIK
     simIK = client.require('simIK')
     sims['UR5'] = sim
-    sim.setStepping(False)
+    sim.setStepping(True)
 
     # Initialize handles and IK environment
     gripper_handle = sim.getObject('./RG2')
     sim_tip = sim.getObject('./ikTip')
-    sim_target = sim.getObject('/ikTarget')
+    sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
 
     jointHandles = []
@@ -81,30 +93,53 @@ def ur5_ik_control():
 
     # Open the gripper
     set_gripper_data(gripper_handle, True)
+    
+    # Set up auxiliary data
+    auxData = {
+        'tip': sim_tip,
+        'target': sim_target,
+        'ikEnv': ik_env,
+        'ikGroup': ik_group
+    }
+    
+    # Movement parameters
+    maxVelocity = [0.1, 0.1, 0.1, 0.1]  # m/s
+    maxAcceleration = [0.1, 0.1, 0.1, 0.1]  # m/s^2
+    maxJerk = [0.1, 0.1, 0.1, 0.1]  # m/s^3
 
     # Main control loop
     try:
-        for x in range(3):
-            # Solve IK
-            success, joint_positions = solve_ik(sim_tip, sim_target, ik_group, ik_env)
-            
-            if success:  # IK solved successfully
-                print(f"IK solved. Joint positions: {joint_positions}")
-                # Apply joint positions to the actual robot
-                for i, joint_handle in enumerate(jointHandles):
-                    sim.setJointTargetPosition(joint_handle, joint_positions[i])
-            else:
-                print("Failed to solve IK")
+        # Solve IK
+        success, joint_positions = solve_ik(sim_tip, sim_target, ik_group, ik_env)
+        
+        if success:  # IK solved successfully
+            print(f"IK solved. Joint positions: {joint_positions}")
+            # Apply joint positions to the actual robot
+            for i, joint_handle in enumerate(jointHandles):
+                sim.setJointTargetPosition(joint_handle, joint_positions[i])
+        else:
+            print("Failed to solve IK")
 
-            # Example movement of the target dummy
-            current_pose = sim.getObjectPose(sim_target)
-            current_pose[1] = current_pose[1] + 0.1  # Move slightly in x direction
-            sim.setObjectPose(sim_target, current_pose)
-            
-            print("Update")
+        # Example movement of the target dummy
+        current_pose = sim.getObjectPose(sim_target)
+        target_pose = current_pose
 
-            #sim.step()  # Step the simulation
-            time.sleep(1)  # Small delay to control the update rate
+        target_pose[2] = current_pose[2] + 0.1
+        #target_pose[1] += 0.2  # Move 0.1m in Y direction
+        
+        print("Moving to target position...")
+
+       # Start the movement
+        movement_in_progress = True
+        while movement_in_progress:
+            result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, target_pose, auxData)
+            movement_in_progress = result[0] is None  # If result[0] is None, movement is still in progress
+            sim.step()
+            time.sleep(0.01)  # Small delay to control the update rate
+        
+        print("Movement completed!")
+            
+        time.sleep(0.1)  # Small delay to control the update rate
 
     except KeyboardInterrupt:
         print("Control loop interrupted")

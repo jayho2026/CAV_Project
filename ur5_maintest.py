@@ -75,8 +75,9 @@ def ur5_control():
         targetPos2 = [90*math.pi/180, 35 * math.pi / 180, 55*math.pi/180, 90*math.pi/180, 90*math.pi/180, 90*math.pi/180]
         moveToConfig(robotColor, jointHandles, maxVel, maxAccel, maxJerk, targetPos2)
         
-        # Open the gripper
+        # Close the gripper
         set_gripper(gripper_handle, False)
+        sim.wait(1)
 
         print('Target 2 completed')
         
