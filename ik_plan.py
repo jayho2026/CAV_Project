@@ -66,6 +66,16 @@ def moveToConfig(robotColor, handles, maxVel, maxAccel, maxJerk, targetConf):
         currentConf.append(sim.getJointPosition(handles[i]))
     sim.moveToConfig(-1, currentConf, None, None, maxVel, maxAccel, maxJerk, targetConf, None, confCallback, {'robotColor': robotColor, 'handles': handles}, None)
 
+def simple_path_planning(start_pose, end_pose, num_steps):
+    path = []
+    for i in range(num_steps + 1):
+        t = i / num_steps
+        intermediate_pose = [
+            start_pose[j] + t * (end_pose[j] - start_pose[j])
+            for j in range(len(start_pose))
+        ]
+        path.append(intermediate_pose)
+    return path
 
 def ur5_ik_control():
     robotColor = 'UR5'
@@ -109,7 +119,7 @@ def ur5_ik_control():
 
     # Main control loop
     try:
-        # Get initial pose of the tip
+         # Get initial pose of the tip
         initial_tip_pose = sim.getObjectPose(sim_tip)
         
         # Set initial target pose to match the tip pose
@@ -117,24 +127,34 @@ def ur5_ik_control():
 
         # Example movement of the target dummy
         current_pose = sim.getObjectPose(sim_target)
-        target_pose = current_pose
+        target_pose = current_pose.copy()
+        target_pose[0] = current_pose[0] - 0.5  # Move 0.2m in Z direction
 
-        target_pose[0] = current_pose[0] - 0.5
-        #target_pose[1] += 0.2  # Move 0.1m in Y direction
-        
+        print("Planning path...")
+        path = simple_path_planning(current_pose, target_pose, 20)  # Break into 50 steps
+
         print("Moving to target position...")
 
-       # Start the movement
-        movement_in_progress = True
-        while movement_in_progress:
-            result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, target_pose, auxData)
-            movement_in_progress = result[0] is None  # If result[0] is None, movement is still in progress
-            sim.step()
-            time.sleep(0.01)  # Small delay to control the update rate
-        
-        print("Movement completed!")
+        for step, pose in enumerate(path):
+            movement_in_progress = True
+            sim.setObjectPose(sim_target, pose)
             
-        time.sleep(0.1)  # Small delay to control the update rate
+            while movement_in_progress:
+                result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, pose, auxData)
+                movement_in_progress = result[0] is None  # If result[0] is None, movement is still in progress
+                sim.step()
+                time.sleep(0.01)  # Small delay to control the update rate
+            
+            print(f"Step {step + 1}/{len(path)} completed")
+
+        print("Movement completed!")
+        
+        # Final pose check
+        final_pose = sim.getObjectPose(sim_tip)
+        distance = math.sqrt(sum((a-b)**2 for a, b in zip(final_pose[:3], target_pose[:3])))
+        print(f"Final distance to target: {distance:.4f} m")
+        
+        #time.sleep(0.1)  # Small delay to control the update rate
 
     except KeyboardInterrupt:
         print("Control loop interrupted")
