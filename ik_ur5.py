@@ -103,28 +103,23 @@ def ur5_ik_control():
     }
     
     # Movement parameters
-    maxVelocity = [0.1, 0.1, 0.1, 0.1]  # m/s
-    maxAcceleration = [0.1, 0.1, 0.1, 0.1]  # m/s^2
-    maxJerk = [0.1, 0.1, 0.1, 0.1]  # m/s^3
+    maxVelocity = [0.4,0.4,0.4,1.8]  # m/s
+    maxAcceleration = [0.8,0.8,0.8,0.9]  # m/s^2
+    maxJerk = [0.6,0.6,0.6,0.8]  # m/s^3
 
     # Main control loop
     try:
-        # Solve IK
-        success, joint_positions = solve_ik(sim_tip, sim_target, ik_group, ik_env)
+        # Get initial pose of the tip
+        initial_tip_pose = sim.getObjectPose(sim_tip)
         
-        if success:  # IK solved successfully
-            print(f"IK solved. Joint positions: {joint_positions}")
-            # Apply joint positions to the actual robot
-            for i, joint_handle in enumerate(jointHandles):
-                sim.setJointTargetPosition(joint_handle, joint_positions[i])
-        else:
-            print("Failed to solve IK")
+        # Set initial target pose to match the tip pose
+        sim.setObjectPose(sim_target, initial_tip_pose)
 
         # Example movement of the target dummy
         current_pose = sim.getObjectPose(sim_target)
         target_pose = current_pose
 
-        target_pose[2] = current_pose[2] + 0.1
+        target_pose[2] = current_pose[2] - 0.2
         #target_pose[1] += 0.2  # Move 0.1m in Y direction
         
         print("Moving to target position...")
