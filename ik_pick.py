@@ -68,22 +68,50 @@ def moveToConfig(robotColor, handles, maxVel, maxAccel, maxJerk, targetConf):
         currentConf.append(sim.getJointPosition(handles[i]))
     sim.moveToConfig(-1, currentConf, None, None, maxVel, maxAccel, maxJerk, targetConf, None, confCallback, {'robotColor': robotColor, 'handles': handles}, None)
 
-
+def calculate_front_position(object_handle, distance=0.1):
+    sim = sims['UR5']
+    object_position = sim.getObjectPosition(object_handle, -1)
+    object_orientation = sim.getObjectOrientation(object_handle, -1)
+    
+    # Calculate the front direction of the object (assuming +X is front)
+    front_vector = sim.getObjectMatrix(object_handle, -1)[0:3]
+    
+    # Calculate the position in front of the object
+    front_position = [
+        object_position[0] + front_vector[0] * distance,
+        object_position[1] + front_vector[1] * distance,
+        object_position[2] + front_vector[2] * distance
+    ]
+    
+    return front_position, object_orientation
 
 
 def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData):
     # Get object position
-    object_position = sim.getObjectPose(object_name)
+    object_handle = sim.getObject(object_name)
+    object_position = sim.getObjectPosition(object_handle)
     
-    # Move slightly above the object
-    below_object = object_position.copy()
-    below_object[2] -= 0  # 10cm below the object
+    # Calculate position in front of the object
+    front_position, object_orientation = calculate_front_position(object_handle)
     
-    # Move to position below object
-    move_to_position(sim, simIK, below_object, sim_target, auxData)
+    # Move to position in front of object
+    move_to_position(sim, simIK, front_position, sim_target, auxData)
     
-    # Move down to object
-    # move_to_position(sim, simIK, object_position, sim_target, auxData)
+    # Create a new IK group for the final pose
+    final_ik_group = simIK.createGroup(ik_env)
+    simIK.addElementFromScene(ik_env, final_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_gamma)
+    
+    print("Approaching object!")
+    
+    # Set the target to the object's position and orientation
+    object_pose = sim.getObjectPose(object_handle)
+    
+    sim.setObjectPose(sim_target, object_pose)
+    
+    # Approach object
+    grab_position = object_position.copy()
+    grab_position[2] -= 0.1  # 0cm
+    move_to_position(sim, simIK, grab_position, sim_target, auxData)
     
     # Close gripper
     set_gripper_data(gripper_handle, False)
@@ -137,7 +165,7 @@ def ur5_ik_control():
     # Create IK environment and group
     ik_env = simIK.createEnvironment()
     ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_pose)
+    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_position)
 
     # Open the gripper
     set_gripper_data(gripper_handle, True)
@@ -147,7 +175,9 @@ def ur5_ik_control():
         'tip': sim_tip,
         'target': sim_target,
         'ikEnv': ik_env,
-        'ikGroup': ik_group
+        'ikGroup': ik_group,
+        'modelBase': model_base,
+        'jointHandles': jointHandles,
     }
     
    
@@ -165,7 +195,7 @@ def ur5_ik_control():
         move_to_position(sim, simIK, initial_position, sim_target, auxData)
         
         # Pick up the object
-        pick_object(sim, simIK, goal_object, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
+        pick_object(sim, simIK, '/Cuboid', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
         
         # Move to a drop-off position
         #rover_pose = sim.getObjectPose(rover)  # Example drop-off position

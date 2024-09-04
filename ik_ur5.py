@@ -90,7 +90,7 @@ def ur5_ik_control():
     # Create IK environment and group
     ik_env = simIK.createEnvironment()
     ik_group = simIK.createGroup(ik_env)
-    custom_constraints = simIK.constraint_position
+    custom_constraints = simIK.constraint_position | simIK.constraint_alpha_beta
 
     simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, custom_constraints)
 
@@ -125,7 +125,7 @@ def ur5_ik_control():
         goal_position = sim.getObjectPose(goal_object)
         
         above_object = goal_position.copy()
-        above_object[2] -= 0
+        above_object[1] -= 0.2
 
         #target_pose[0] = current_pose[0] - 0.5
         #target_pose[1] += 0.2  # Move 0.1m in Y direction
