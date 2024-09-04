@@ -90,7 +90,7 @@ def ur5_ik_control():
     # Create IK environment and group
     ik_env = simIK.createEnvironment()
     ik_group = simIK.createGroup(ik_env)
-    custom_constraints = simIK.constraint_position | simIK.constraint_alpha_beta
+    custom_constraints = simIK.constraint_orientation
 
     simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, custom_constraints)
 
