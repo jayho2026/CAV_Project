@@ -81,6 +81,7 @@ def ur5_ik_control():
     sim_tip = sim.getObject('./ikTip')
     sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
+    goal_object = sim.getObject('/Cuboid')
 
     jointHandles = []
     for i in range(6):
@@ -89,7 +90,9 @@ def ur5_ik_control():
     # Create IK environment and group
     ik_env = simIK.createEnvironment()
     ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_pose)
+    custom_constraints = simIK.constraint_position
+
+    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, custom_constraints)
 
     # Open the gripper
     set_gripper_data(gripper_handle, True)
@@ -118,8 +121,13 @@ def ur5_ik_control():
         # Example movement of the target dummy
         current_pose = sim.getObjectPose(sim_target)
         target_pose = current_pose
+        
+        goal_position = sim.getObjectPose(goal_object)
+        
+        above_object = goal_position.copy()
+        above_object[2] -= 0
 
-        target_pose[0] = current_pose[0] - 0.5
+        #target_pose[0] = current_pose[0] - 0.5
         #target_pose[1] += 0.2  # Move 0.1m in Y direction
         
         print("Moving to target position...")
@@ -127,7 +135,7 @@ def ur5_ik_control():
        # Start the movement
         movement_in_progress = True
         while movement_in_progress:
-            result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, target_pose, auxData)
+            result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, above_object, auxData)
             movement_in_progress = result[0] is None  # If result[0] is None, movement is still in progress
             sim.step()
             time.sleep(0.01)  # Small delay to control the update rate

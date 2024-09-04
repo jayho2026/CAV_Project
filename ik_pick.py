@@ -1,4 +1,4 @@
-# inverse kinematic path planning step slow version
+# This is the inverse kinematic for picking the object and holding it on air
 
 import math
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
@@ -8,7 +8,7 @@ import time
 global sims, simIK
 sims = {}
 
-def set_gripper_data(gripper_handle, open, velocity=0.11, force=20):
+def set_gripper_data(gripper_handle, open, velocity=0.15, force=50):
     sim = sims['UR5']
     if not open:
         velocity = -velocity
@@ -68,16 +68,50 @@ def moveToConfig(robotColor, handles, maxVel, maxAccel, maxJerk, targetConf):
         currentConf.append(sim.getJointPosition(handles[i]))
     sim.moveToConfig(-1, currentConf, None, None, maxVel, maxAccel, maxJerk, targetConf, None, confCallback, {'robotColor': robotColor, 'handles': handles}, None)
 
-def simple_path_planning(start_pose, end_pose, num_steps):
-    path = []
-    for i in range(num_steps + 1):
-        t = i / num_steps
-        intermediate_pose = [
-            start_pose[j] + t * (end_pose[j] - start_pose[j])
-            for j in range(len(start_pose))
-        ]
-        path.append(intermediate_pose)
-    return path
+
+
+
+def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData):
+    # Get object position
+    object_position = sim.getObjectPose(object_name)
+    
+    # Move slightly above the object
+    below_object = object_position.copy()
+    below_object[2] -= 0  # 10cm below the object
+    
+    # Move to position below object
+    move_to_position(sim, simIK, below_object, sim_target, auxData)
+    
+    # Move down to object
+    # move_to_position(sim, simIK, object_position, sim_target, auxData)
+    
+    # Close gripper
+    set_gripper_data(gripper_handle, False)
+    time.sleep(1)  # Wait for gripper to close
+    
+    # Lift object
+    lift_position = object_position.copy()
+    lift_position[2] += 0.3  # Lift 10cm
+    move_to_position(sim, simIK, lift_position, sim_target, auxData)
+
+def move_to_position(sim, simIK, position, sim_target, auxData):
+    current_pose = sim.getObjectPose(sim_target)
+    target_pose = current_pose.copy()
+    target_pose[:3] = position  # Update only the position, keep the orientation
+    
+    maxVelocity = [0.4, 0.4, 0.4, 1.8]
+    maxAcceleration = [0.8, 0.8, 0.8, 0.9]
+    maxJerk = [0.6, 0.6, 0.6, 0.8]
+    
+    movement_in_progress = True
+    while movement_in_progress:
+        sim.setObjectPose(sim_target, target_pose)
+        result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, target_pose, auxData)
+        movement_in_progress = result[0] is None
+        sim.step()
+        time.sleep(0.01)
+
+
 
 def ur5_ik_control():
     robotColor = 'UR5'
@@ -94,7 +128,7 @@ def ur5_ik_control():
     sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
     goal_object = sim.getObject('/Cuboid')
-
+    #rover = sim.getObject('/PioneerP3DX')
 
     jointHandles = []
     for i in range(6):
@@ -103,7 +137,7 @@ def ur5_ik_control():
     # Create IK environment and group
     ik_env = simIK.createEnvironment()
     ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_position)
+    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_pose)
 
     # Open the gripper
     set_gripper_data(gripper_handle, True)
@@ -116,55 +150,33 @@ def ur5_ik_control():
         'ikGroup': ik_group
     }
     
-    # Movement parameters
-    maxVelocity = [0.4,0.4,0.4,1.8]  # m/s
-    maxAcceleration = [0.8,0.8,0.8,0.9]  # m/s^2
-    maxJerk = [0.6,0.6,0.6,0.8]  # m/s^3
+   
 
     # Main control loop
     try:
-         # Get initial pose of the tip
+        # Get initial pose of the tip
         initial_tip_pose = sim.getObjectPose(sim_tip)
         
         # Set initial target pose to match the tip pose
         sim.setObjectPose(sim_target, initial_tip_pose)
+
+         # Move to a starting position
+        initial_position = initial_tip_pose  # Example starting position
+        move_to_position(sim, simIK, initial_position, sim_target, auxData)
         
-        # Goal pose
-        goal_position = sim.getObjectPose(goal_object)
+        # Pick up the object
+        pick_object(sim, simIK, goal_object, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
         
-        above_object = goal_position.copy()
-        above_object[2] -= 0.1
-
-        # Example movement of the target dummy
-        current_pose = sim.getObjectPose(sim_target)
-        target_pose = current_pose.copy()
-        target_pose[0] = current_pose[0] - 0.5  # Move 0.2m in Z direction
-
-        print("Planning path...")
-        path = simple_path_planning(current_pose, above_object, 20)  # Break into 50 steps
-
-        print("Moving to target position...")
-
-        for step, pose in enumerate(path):
-            movement_in_progress = True
-            sim.setObjectPose(sim_target, pose)
-            
-            while movement_in_progress:
-                result = moveToPose_viaIK(sim, simIK, maxVelocity, maxAcceleration, maxJerk, pose, auxData)
-                movement_in_progress = result[0] is None  # If result[0] is None, movement is still in progress
-                sim.step()
-                time.sleep(0.01)  # Small delay to control the update rate
-            
-            print(f"Step {step + 1}/{len(path)} completed")
-
-        print("Movement completed!")
+        # Move to a drop-off position
+        #rover_pose = sim.getObjectPose(rover)  # Example drop-off position
+        #beside_rover = rover_pose.copy()
+        #beside_rover -= 0.3
+        #move_to_position(sim, simIK, beside_rover, sim_target, auxData)
         
-        # Final pose check
-        final_pose = sim.getObjectPose(sim_tip)
-        distance = math.sqrt(sum((a-b)**2 for a, b in zip(final_pose[:3], target_pose[:3])))
-        print(f"Final distance to target: {distance:.4f} m")
+        # Open gripper to release object
+        set_gripper_data(gripper_handle, True)
         
-        #time.sleep(0.1)  # Small delay to control the update rate
+        print("Pick and place completed!")
 
     except KeyboardInterrupt:
         print("Control loop interrupted")
