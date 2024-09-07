@@ -68,7 +68,7 @@ def moveToConfig(robotColor, handles, maxVel, maxAccel, maxJerk, targetConf):
         currentConf.append(sim.getJointPosition(handles[i]))
     sim.moveToConfig(-1, currentConf, None, None, maxVel, maxAccel, maxJerk, targetConf, None, confCallback, {'robotColor': robotColor, 'handles': handles}, None)
 
-def calculate_front_position(object_handle, distance=0.1):
+def calculate_front_position(object_handle, distance=0.2):
     sim = sims['UR5']
     object_position = sim.getObjectPosition(object_handle, -1)
     #object_orientation = sim.getObjectOrientation(object_handle, -1)
@@ -89,7 +89,7 @@ def calculate_front_position(object_handle, distance=0.1):
 def flat_gripper_quaternion():
     # This quaternion represents a rotation of -90 degrees around the X-axis
     angle = -math.pi / 2
-    return [math.sin(angle/2), 0, 0, math.cos(angle/2)]
+    return [0.707, 0, 0, 1.407]
 
 def calculate_gripper_orientation(object_handle):
     sim = sims['UR5']
@@ -101,6 +101,30 @@ def calculate_gripper_orientation(object_handle):
     
     return flat_orientation
 
+def reorient_gripper(sim, simIK, desired_orientation, sim_tip, sim_target, ik_env, model_base, joint_handles):
+    # Create a new IK group for orientation only
+    orient_ik_group = simIK.createGroup(ik_env)
+    simIK.addElementFromScene(ik_env, orient_ik_group, model_base, sim_tip, sim_target, simIK.constraint_orientation)
+    
+    # Get current position
+    current_pose = sim.getObjectPose(sim_tip)
+    
+    # Create target pose with current position and desired orientation
+    target_pose = current_pose[:3] + desired_orientation
+    
+    # Set the target pose
+    sim.setObjectPose(sim_target, target_pose)
+    
+    # Solve IK for the new orientation
+    result, joint_positions = solve_ik(sim_tip, sim_target, orient_ik_group, ik_env)
+    if result:
+        set_joint_positions(joint_handles, joint_positions)
+        print("Gripper reoriented successfully")
+    else:
+        print("Failed to reorient gripper")
+    
+    
+
 def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData):
     # Get object position
     object_handle = sim.getObject(object_name)
@@ -109,40 +133,53 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
 
     # Calculate approach pose (position and orientation)
     approach_position = calculate_front_position(object_handle)
-    approach_orientation = calculate_gripper_orientation(object_handle)
-    approach_pose = approach_position + approach_orientation
+    
+    approach_pose = sim.getObjectPose(sim_target)
+    approach_pose = object_pose.copy()
+    approach_pose[0] += 0.2
+    move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
     
     # Move to approach pose
-    move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
+    #move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
     
     print("Approaching object!")
     
-    # Calculate grab pose
-    grab_pose = object_pose.copy()
-    grab_pose[2] -= 0.05  # Adjust height slightly above the object
-    angle = -math.pi / 2
-    grab_pose[3:] = [0.707, 0.707, 0, 0]  # Keep the flat orientation for grabbing
+    # Calculate and apply the desired orientation
+    desired_orientation = calculate_gripper_orientation(object_handle)
+    orient_ik_group = simIK.createGroup(ik_env)
+    simIK.addElementFromScene(ik_env, orient_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_position)
     
-    # Create a new IK group for the final pose with orientation constraint
-    final_ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, final_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_pose)
+    # Get current position
+    current_pose = sim.getObjectPose(sim_tip)
     
+    # Create target pose with current position and desired orientation
+    desired_pose = current_pose[:3] + desired_orientation
+    print("Reoriented gripper. Current gripper pose:")
+    print(sim.getObjectPose(sim_tip))
+    
+    move_to_pose(sim, simIK, desired_pose, sim_target, auxData)
+    
+   
     # Set the target to the grab pose
     #sim.setObjectPose(sim_target, grab_pose)
     
-    print("Flat hand orientation!")
-    
-    # Move to grab pose
+    # Move down to grab the object
+    grab_pose = object_pose.copy()
+    grab_pose[2] = object_pose[2] - 0  # Adjust height slightly below the object
     move_to_pose(sim, simIK, grab_pose, sim_target, auxData)
+
+    print("Moved to grab pose. Current gripper pose:")
+    print(sim.getObjectPose(sim_tip))
     
     # Close gripper
     set_gripper_data(gripper_handle, False)
-    time.sleep(1)  # Wait for gripper to close
+    time.sleep(2)  # Wait for gripper to close
     
     # Lift object
     lift_position = object_pose.copy()
     lift_position[2] += 0.3  # Lift 10cm
     move_to_pose(sim, simIK, lift_position, sim_target, auxData)
+    
     
 
 
@@ -189,7 +226,7 @@ def ur5_ik_control():
     # Create IK environment and group
     ik_env = simIK.createEnvironment()
     ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_position)
+    simIK.addElementFromScene(ik_env, ik_group, model_base, sim_tip, sim_target, simIK.constraint_pose)
 
     # Open the gripper
     set_gripper_data(gripper_handle, True)
@@ -228,7 +265,7 @@ def ur5_ik_control():
         #move_to_position(sim, simIK, beside_rover, sim_target, auxData)
         
         # Open gripper to release object
-        set_gripper_data(gripper_handle, True)
+        set_gripper_data(gripper_handle, False)
         
         print("Pick and place completed!")
 
@@ -252,6 +289,7 @@ def main():
     except KeyboardInterrupt: 
         print("Simulation interrupted by user.")
     finally:
+        input()
         sim.stopSimulation()
 
     print('Program ended')
