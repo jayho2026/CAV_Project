@@ -58,15 +58,31 @@ def move_to_pose(sim, simIK, target_pose, sim_target, auxData):
         sim.step()
         time.sleep(0.01)
 
+
+def check_distance(sim, robot_handle, object_handle, threshold=0.8):
+    robot_position = sim.getObjectPosition(robot_handle, -1)
+    object_position = sim.getObjectPosition(object_handle, -1)
+    
+    distance = math.sqrt(sum((a - b) ** 2 for a, b in zip(robot_position, object_position)))
+    print(f"Distance to object: {distance} meters")
+    return distance <= threshold
+
 def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData):
     object_handle = sim.getObject(object_name)
     object_pose = sim.getObjectPose(object_handle)
 
+    print("Approaching object!")
     # Approach pose
     approach_pose = object_pose.copy()
-    approach_pose[2] += 0.2
+    approach_pose[2] += 0.2     # on top of the object
     move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
     
+    
+    ik_env2 = simIK.createEnvironment()
+    orient_ik_group = simIK.createGroup(ik_env2)
+    simIK.addElementFromScene(ik_env2, orient_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_pose)
+    
+    print("Grabbing object")
     # Grab pose
     grab_pose = object_pose.copy()
     grab_pose[2] -= 0.01  # Adjust height slightly below the object
@@ -74,7 +90,7 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
 
     # Close gripper
     set_gripper_data(gripper_handle, False)
-    time.sleep(2)  # Wait for gripper to close
+    #time.sleep(2)  # Wait for gripper to close
     
     # Lift object
     lift_pose = grab_pose.copy()
@@ -94,6 +110,7 @@ def ur5_ik_control():
     sim_tip = sim.getObject('./ikTip')
     sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
+    
 
     jointHandles = []
     for i in range(6):
@@ -127,15 +144,17 @@ def ur5_ik_control():
     # Pick up the object
     pick_object(sim, simIK, '/Object', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
     
+    print("Picking completed!")
+    
     # Move to a drop-off position (you can adjust this as needed)
-    drop_off_pose = initial_tip_pose.copy()
-    drop_off_pose[1] += 0.2  # Move from initial position
-    move_to_pose(sim, simIK, drop_off_pose, sim_target, auxData)
+    #drop_off_pose = initial_tip_pose.copy()
+    #drop_off_pose[1] += 0.2  # Move from initial position
+    #move_to_pose(sim, simIK, drop_off_pose, sim_target, auxData)
     
     # Open gripper to release object
-    set_gripper_data(gripper_handle, True)
+    #set_gripper_data(gripper_handle, True)
     
-    print("Pick and place completed!")
+    #print("Pick and place completed!")
 
     sim.setStepping(False)
 
@@ -152,12 +171,18 @@ def main():
             while True:
                 nav_signal = sim.getIntegerSignal("nav_completed")
                 if nav_signal == 1:
-                    print("Navigation task completed. Executing robotic arm control.")
-                    ur5_thread = threading.Thread(target=ur5_ik_control)
-                    ur5_thread.start()
-                    ur5_thread.join()  # Wait for UR5 control to complete
+                    print("Navigation task completed. Checking distance...")
+                    robot_base = sim.getObject('/UR5')
+                    object_handle = sim.getObject('/Object')
+                    if check_distance(sim, robot_base, object_handle):
+                        print("Object is within reach. Executing robotic arm control.")
+                        ur5_thread = threading.Thread(target=ur5_ik_control)
+                        ur5_thread.start()
+                        ur5_thread.join()  # Wait for UR5 control to complete
+                    else:
+                        print("Object is too far away. Skipping arm control.")
                     sim.setIntegerSignal("nav_completed", 0)  # Reset the signal
-                    print("Robotic arm control completed. Ready for next cycle.")
+                    print("Ready for next cycle.")
                     break  # Exit the inner loop and wait for the next navigation signal
                 sim.step()  # Step the simulation
             

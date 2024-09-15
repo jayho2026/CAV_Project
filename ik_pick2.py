@@ -1,5 +1,5 @@
 # This is the inverse kinematic for picking the object and holding it on air
-# ur5 joint 1 is set to 90 degrees, and the rest of the joint is 0 degrees
+# ur5 joint 1 is set to 90 degrees, joint 5 is -90 degrees and the rest of the joint is 0 degrees
 
 import math
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
@@ -175,7 +175,7 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     
     approach_pose = sim.getObjectPose(sim_target)
     approach_pose = object_pose.copy()
-    approach_pose[2] += 0.2
+    approach_pose[2] += 0.2     # on top of the object
     move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
     
     # Move to approach pose
