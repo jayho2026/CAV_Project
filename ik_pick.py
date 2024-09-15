@@ -136,7 +136,7 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     
     approach_pose = sim.getObjectPose(sim_target)
     approach_pose = object_pose.copy()
-    approach_pose[0] += 0.2
+    approach_pose[2] += 0.2
     move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
     
     # Move to approach pose
@@ -216,7 +216,7 @@ def ur5_ik_control():
     sim_tip = sim.getObject('./ikTip')
     sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
-    goal_object = sim.getObject('/Cylinder')
+    goal_object = sim.getObject('/Object')
     #rover = sim.getObject('/PioneerP3DX')
 
     jointHandles = []
@@ -256,7 +256,7 @@ def ur5_ik_control():
         move_to_pose(sim, simIK, initial_position, sim_target, auxData)
         
         # Pick up the object
-        pick_object(sim, simIK, '/Cylinder', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
+        pick_object(sim, simIK, '/Object', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
         
         # Move to a drop-off position
         #rover_pose = sim.getObjectPose(rover)  # Example drop-off position

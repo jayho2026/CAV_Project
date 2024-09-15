@@ -1,4 +1,5 @@
 # This is the inverse kinematic for picking the object and holding it on air
+# ur5 joint 1 is set to 90 degrees, and the rest of the joint is 0 degrees
 
 import math
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
@@ -91,26 +92,64 @@ def flat_gripper_quaternion():
     angle = -math.pi / 2
     return [0.707, 0, 0, 1.407]
 
-def calculate_gripper_orientation(object_handle):
+def calculate_gripper_orientation(object_handle, gripper_handle):
     sim = sims['UR5']
     # Get the object's position
     #object_position = sim.getObjectPosition(object_handle, -1)
     
     # Calculate a flat gripper orientation
-    flat_orientation = flat_gripper_quaternion()
+    #flat_orientation = flat_gripper_quaternion()
     
-    return flat_orientation
+     
+    # Get object and gripper positions
+    object_position = sim.getObjectPosition(object_handle, -1)
+    gripper_position = sim.getObjectPosition(gripper_handle, -1)
+    
+    # We want the z-axis to point straight down
+    z_axis = [0, 0, -1]
+    
+    # Choose x-axis to point towards the object in the XY plane
+    x_axis = [
+        object_position[0] - gripper_position[0],
+        object_position[1] - gripper_position[1],
+        0
+    ]
+    
+    # Normalize x_axis
+    length = (x_axis[0]**2 + x_axis[1]**2)**0.5
+    if length > 1e-6:  # Avoid division by zero
+        x_axis = [x_axis[0]/length, x_axis[1]/length, 0]
+    else:
+        # If gripper is directly above object, choose arbitrary x direction
+        x_axis = [1, 0, 0]
+    
+    # Calculate y-axis as cross product of z and x
+    y_axis = [
+        z_axis[1]*x_axis[2] - z_axis[2]*x_axis[1],
+        z_axis[2]*x_axis[0] - z_axis[0]*x_axis[2],
+        z_axis[0]*x_axis[1] - z_axis[1]*x_axis[0]
+    ]
+    
+    # Create the 12-element transformation matrix
+    transformation_matrix = [
+        x_axis[0], x_axis[1], x_axis[2], gripper_position[0],
+        y_axis[0], y_axis[1], y_axis[2], gripper_position[1],
+        z_axis[0], z_axis[1], z_axis[2], gripper_position[2]
+    ]
+    
+    # Convert transformation matrix to pose
+    return sim.matrixToPose(transformation_matrix)
 
-def reorient_gripper(sim, simIK, desired_orientation, sim_tip, sim_target, ik_env, model_base, joint_handles):
+def reorient_gripper(sim, simIK, desired_orientation, sim_tip, sim_target, orient_ik_group, ik_env, joint_handles):
     # Create a new IK group for orientation only
-    orient_ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, orient_ik_group, model_base, sim_tip, sim_target, simIK.constraint_orientation)
+    #orient_ik_group = simIK.createGroup(ik_env)
+    #simIK.addElementFromScene(ik_env, orient_ik_group, model_base, sim_tip, sim_target, simIK.constraint_orientation)
     
     # Get current position
     current_pose = sim.getObjectPose(sim_tip)
     
     # Create target pose with current position and desired orientation
-    target_pose = current_pose[:3] + desired_orientation
+    target_pose = current_pose[:3] + desired_orientation[3:]
     
     # Set the target pose
     sim.setObjectPose(sim_target, target_pose)
@@ -145,19 +184,27 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     print("Approaching object!")
     
     # Calculate and apply the desired orientation
-    desired_orientation = calculate_gripper_orientation(object_handle)
-    orient_ik_group = simIK.createGroup(ik_env)
-    simIK.addElementFromScene(ik_env, orient_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_pose)
+    desired_orientation = calculate_gripper_orientation(object_handle, gripper_handle)
+
+    ik_env2 = simIK.createEnvironment()
+    orient_ik_group = simIK.createGroup(ik_env2)
+    simIK.addElementFromScene(ik_env2, orient_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_pose)
+    
+    #reorient_gripper(sim, simIK, desired_orientation, sim_tip, sim_target, orient_ik_group, ik_env, auxData['jointHandles'])
+
     
     # Get current position
     current_pose = sim.getObjectPose(sim_tip)
     
     # Create target pose with current position and desired orientation
-    desired_pose = current_pose[:3] + desired_orientation
-    print("Reoriented gripper. Current gripper pose:")
-    print(sim.getObjectPose(sim_tip))
+    desired_pose = current_pose[:3] + desired_orientation[3:]
     
-    move_to_pose(sim, simIK, desired_pose, sim_target, auxData)
+    
+    #move_to_pose(sim, simIK, desired_pose, sim_target, auxData)
+    
+    #print("Reoriented gripper. Current gripper pose:")
+    #print(sim.getObjectPose(sim_tip))
+
     
    
     # Set the target to the grab pose
@@ -173,7 +220,7 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     
     # Close gripper
     set_gripper_data(gripper_handle, False)
-    time.sleep(1)  # Wait for gripper to close
+    #time.sleep(1)  # Wait for gripper to close
     
     # Lift object
     lift_position = object_pose.copy()
@@ -216,8 +263,8 @@ def ur5_ik_control():
     sim_tip = sim.getObject('./ikTip')
     sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
-    goal_object = sim.getObject('/Cylinder')
-    goal_name = '/Cylinder'
+    #goal_object = sim.getObject('/Object')
+    goal_name = '/Object'
     #rover = sim.getObject('/PioneerP3DX')
 
     jointHandles = []
