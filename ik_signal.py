@@ -174,6 +174,7 @@ def ur5_ik_control():
     
     if pick_flag:
         object_handle = sim.getObject('/Object')
+        pick_flag = False
         if check_distance(sim, robot_base, object_handle):
             print("Object is within reach. Executing robotic arm control.")
             # Open the gripper
@@ -192,10 +193,11 @@ def ur5_ik_control():
             
             print("Picking completed!")
             
-            pick_flag = False
+        
         
     else:
         object_handle = sim.getObject('/DropLocation')
+        pick_flag = True
         if check_distance(sim, robot_base, object_handle):
             print("Drop off is within reach. Executing robotic arm control.")
             
@@ -203,7 +205,7 @@ def ur5_ik_control():
         
             print("Drop off completed!")
         
-            pick_flag = True
+            
             
         else:
             print("Drop location is too far away. Skipping arm control.")
