@@ -108,7 +108,7 @@ def drop_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     print("Approaching drop off!")
     # Approach pose
     approach_pose = object_pose.copy()
-    approach_pose[2] += 0.7     # on top of the object
+    approach_pose[2] += 0.5     # on top of the object
     move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
     
     
@@ -119,7 +119,7 @@ def drop_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     print("Closer position to drop object safely")
     # Drop pose
     drop_pose = object_pose.copy()
-    drop_pose[2] += 0.3  # Adjust height slightly below the object
+    drop_pose[2] += 0.25  # Adjust height slightly below the object
     move_to_pose(sim, simIK, drop_pose, sim_target, auxData)
 
     # Open gripper
@@ -133,10 +133,11 @@ def drop_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     
 
 def ur5_ik_control():
+    global simIK
+    global pick_flag
     robotColor = 'UR5'
     client = RemoteAPIClient()
     sim = client.require('sim')
-    global simIK
     simIK = client.require('simIK')
     sims['UR5'] = sim
     sim.setStepping(True)
