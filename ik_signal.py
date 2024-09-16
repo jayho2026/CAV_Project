@@ -8,6 +8,10 @@ from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 global sims, simIK
 sims = {}
 
+global pick_flag
+pick_flag = True
+
+
 def set_gripper_data(gripper_handle, open, velocity=0.15, force=60):
     sim = sims['UR5']
     if not open:
@@ -97,6 +101,37 @@ def pick_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik
     lift_pose[2] += 0.3  # Lift 30cm
     move_to_pose(sim, simIK, lift_pose, sim_target, auxData)
 
+def drop_object(sim, simIK, object_name, gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData):
+    object_handle = sim.getObject(object_name)
+    object_pose = sim.getObjectPose(object_handle)
+
+    print("Approaching drop off!")
+    # Approach pose
+    approach_pose = object_pose.copy()
+    approach_pose[2] += 0.7     # on top of the object
+    move_to_pose(sim, simIK, approach_pose, sim_target, auxData)
+    
+    
+    ik_env2 = simIK.createEnvironment()
+    orient_ik_group = simIK.createGroup(ik_env2)
+    simIK.addElementFromScene(ik_env2, orient_ik_group, auxData['modelBase'], sim_tip, sim_target, simIK.constraint_pose)
+    
+    print("Closer position to drop object safely")
+    # Drop pose
+    drop_pose = object_pose.copy()
+    drop_pose[2] += 0.3  # Adjust height slightly below the object
+    move_to_pose(sim, simIK, drop_pose, sim_target, auxData)
+
+    # Open gripper
+    set_gripper_data(gripper_handle, True)
+    
+    # Return arm to og position
+    og_pose = drop_pose.copy()
+    og_pose[2] += 0.3  # Lift 30cm
+    move_to_pose(sim, simIK, og_pose, sim_target, auxData)
+    
+    
+
 def ur5_ik_control():
     robotColor = 'UR5'
     client = RemoteAPIClient()
@@ -129,22 +164,49 @@ def ur5_ik_control():
         'jointHandles': jointHandles,
     }
 
-    # Open the gripper
-    set_gripper_data(gripper_handle, True)
+    if pick_flag:
+        print("Picking sequence")
+    else:
+        print("Drop off sequence")
+    
+    robot_base = sim.getObject('/PioneerP3DX')
+    
+    if pick_flag:
+        object_handle = sim.getObject('/Object')
+        if check_distance(sim, robot_base, object_handle):
+            print("Object is within reach. Executing robotic arm control.")
+            # Open the gripper
+            set_gripper_data(gripper_handle, True)
 
-    # Get initial pose of the tip
-    initial_tip_pose = sim.getObjectPose(sim_tip)
-    
-    # Set initial target pose to match the tip pose
-    sim.setObjectPose(sim_target, initial_tip_pose)
+            # Get initial pose of the tip
+            initial_tip_pose = sim.getObjectPose(sim_tip)
+            
+            # Set initial target pose to match the tip pose
+            sim.setObjectPose(sim_target, initial_tip_pose)
 
-    # Move to a starting position
-    move_to_pose(sim, simIK, initial_tip_pose, sim_target, auxData)
+            # Move to a starting position
+            move_to_pose(sim, simIK, initial_tip_pose, sim_target, auxData)
+            # Pick up the object
+            pick_object(sim, simIK, '/Object', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
+            
+            print("Picking completed!")
+            
+            pick_flag = False
+        
+    else:
+        object_handle = sim.getObject('/DropLocation')
+        if check_distance(sim, robot_base, object_handle):
+            print("Drop off is within reach. Executing robotic arm control.")
+            
+            drop_object(sim, simIK, '/DropLocation', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
+        
+            print("Drop off completed!")
+        
+            pick_flag = True
+            
+        else:
+            print("Drop location is too far away. Skipping arm control.")
     
-    # Pick up the object
-    pick_object(sim, simIK, '/Object', gripper_handle, sim_tip, sim_target, ik_env, ik_group, auxData)
-    
-    print("Picking completed!")
     
     # Move to a drop-off position (you can adjust this as needed)
     #drop_off_pose = initial_tip_pose.copy()
@@ -172,15 +234,11 @@ def main():
                 nav_signal = sim.getIntegerSignal("nav_completed")
                 if nav_signal == 1:
                     print("Navigation task completed. Checking distance...")
-                    robot_base = sim.getObject('/UR5')
-                    object_handle = sim.getObject('/Object')
-                    if check_distance(sim, robot_base, object_handle):
-                        print("Object is within reach. Executing robotic arm control.")
-                        ur5_thread = threading.Thread(target=ur5_ik_control)
-                        ur5_thread.start()
-                        ur5_thread.join()  # Wait for UR5 control to complete
-                    else:
-                        print("Object is too far away. Skipping arm control.")
+                    
+                    ur5_thread = threading.Thread(target=ur5_ik_control)
+                    ur5_thread.start()
+                    ur5_thread.join()  # Wait for UR5 control to complete
+                    
                     sim.setIntegerSignal("nav_completed", 0)  # Reset the signal
                     print("Ready for next cycle.")
                     break  # Exit the inner loop and wait for the next navigation signal
