@@ -81,7 +81,7 @@ def ur5_ik_control():
     sim_tip = sim.getObject('./ikTip')
     sim_target = sim.getObject('./ikTarget')
     model_base = sim.getObject('/UR5')
-    goal_object = sim.getObject('/Cuboid')
+    goal_object = sim.getObject('/Object')
 
     jointHandles = []
     for i in range(6):
